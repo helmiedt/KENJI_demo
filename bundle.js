@@ -1,1 +1,89 @@
-(()=>{var e={194(){console.log("📦 png-sequence-animator: Loading...");let e=!1,a=[],t=0,n=0,r=0,o=null,i=null;function d(c){if(requestAnimationFrame(d),!e)return;if(!o){try{const{scene:e}=XR8.Threejs.xrScene();e.traverse(e=>{e.isMesh&&e.material&&e.material.map&&(o=e)})}catch(e){}return}if(t<40)return;if(null===i)return void(i=c);const s=c-i;i=c,r+=s;const l=1e3/24;r<l||(r%=l,n=(n+1)%40,o.material&&(o.material.map=a[n],o.material.transparent=!0,o.material.needsUpdate=!0))}window.addEventListener("xrloaded",()=>{console.log("✅ XR8 Ready, starting png-sequence-animator...");const n=setInterval(()=>{try{const r=XR8.Threejs.xrScene();r&&r.scene&&(clearInterval(n),function(e){const n=new THREE.TextureLoader;for(let e=1;e<=40;e++){const r=`assets/pngseq/tigerface${String(e).padStart(3,"0")}.png`,o=n.load(r,()=>{t++,console.log(`Loaded ${t}/40`)});o.colorSpace=THREE.SRGBColorSpace,a.push(o)}e.traverse(e=>{e.isMesh&&e.material&&e.material.map&&(o=e,console.log("✅ Found Plane mesh:",e.name||e.uuid))}),o||console.warn("⚠️ Could not find Plane mesh on init, will retry in update loop")}(r.scene),e=!0,console.log("✅ png-sequence-animator initialized"),requestAnimationFrame(d))}catch(e){}},100)}),console.log("📦 png-sequence-animator: Loaded")}},a={};function t(n){var r=a[n];if(void 0!==r)return r.exports;var o=a[n]={exports:{}};return e[n](o,o.exports,t),o.exports}(()=>{"use strict";t(194);const e=JSON.parse('{"objects":{"47699d9e-18a5-4f88-a4f9-b8be92e8f74a":{"components":{},"geometry":null,"id":"47699d9e-18a5-4f88-a4f9-b8be92e8f74a","light":{"type":"ambient"},"material":null,"name":"Ambient Light","position":[10,5,5],"rotation":[0,0,0,1],"scale":[1,1,1],"parentId":"88453035-dc0f-486d-868a-8ff7c2fda864","order":0.4038940050501252},"a608ddd9-9379-464d-966f-5d8d8674c83c":{"camera":{"type":"perspective","xr":{"desktop":"disabled","xrCameraType":"world","headset":"disabled","phone":"AR","direction":"back"}},"components":{},"geometry":null,"id":"a608ddd9-9379-464d-966f-5d8d8674c83c","material":null,"name":"Camera","position":[0,0,0],"rotation":[0,0,0,1],"scale":[1,1,1],"parentId":"88453035-dc0f-486d-868a-8ff7c2fda864","order":1.0308214152219775},"ac1989e3-3b71-49e2-a05f-e682aeb18c36":{"components":{},"geometry":null,"id":"ac1989e3-3b71-49e2-a05f-e682aeb18c36","light":{"intensity":1,"type":"directional"},"material":null,"name":"Directional Light","position":[20,20,10],"rotation":[0,0,0,1],"scale":[1,1,1],"parentId":"88453035-dc0f-486d-868a-8ff7c2fda864","order":0.6644431107322474},"3db23022-b7cf-42c8-aa76-514eea60744d":{"id":"3db23022-b7cf-42c8-aa76-514eea60744d","position":[0,0,0],"rotation":[0,0,0,1],"scale":[1,1,1],"geometry":null,"material":null,"parentId":"88453035-dc0f-486d-868a-8ff7c2fda864","components":{},"name":"Image Target","imageTarget":{"name":"my_target.png"},"order":2.9164893056959245},"e347af4a-618a-4cbf-b5fd-4b1b86640cba":{"id":"e347af4a-618a-4cbf-b5fd-4b1b86640cba","position":[0,-6.938893903907228e-18,0.1957672797860202],"rotation":[-0.1716610298601247,0,0,0.9851560743493192],"scale":[0.573884031905844,0.6687761800618436,1.0000000532124809],"geometry":{"type":"plane","width":1,"height":1},"material":{"type":"unlit","color":"#FFFFFF","textureSrc":{"type":"asset","asset":"assets/pngseq/tigerface001.png"},"forceTransparent":true,"side":"double"},"parentId":"3db23022-b7cf-42c8-aa76-514eea60744d","components":{},"name":"Plane","order":1.361236427256126}},"spaces":{"88453035-dc0f-486d-868a-8ff7c2fda864":{"id":"88453035-dc0f-486d-868a-8ff7c2fda864","name":"Default","activeCamera":"a608ddd9-9379-464d-966f-5d8d8674c83c","reflections":{"type":"url","url":"https://cdn.8thwall.com/web/assets/envmap/basic_env_map-m9hqpneh.jpg"}}},"entrySpaceId":"88453035-dc0f-486d-868a-8ff7c2fda864","scripts":["png-sequence-animator.js"],"runtimeVersion":{"type":"version","level":"major","major":2,"minor":0,"patch":0}}');delete e.history,delete e.historyVersion,window.ecs.application.init(e)})()})();
+(() => {
+  console.log('📦 png-sequence-animator: Loading...')
+
+  const FRAME_COUNT = 40
+  const FPS = 24
+  const PREFIX = 'tigerface'
+  const FOLDER = 'assets/pngseq/'
+
+  let initialized = false
+  let textures = []
+  let loadedCount = 0
+  let currentFrame = 0
+  let elapsed = 0
+  let planeMesh = null
+  let lastTime = null
+
+  function setupAnimation(scene) {
+    const loader = new THREE.TextureLoader()
+    for (let i = 1; i <= FRAME_COUNT; i++) {
+      const num = String(i).padStart(3, '0')
+      const tex = loader.load(`${FOLDER}${PREFIX}${num}.png`, () => { loadedCount++ })
+      tex.colorSpace = THREE.SRGBColorSpace
+      textures.push(tex)
+    }
+    scene.traverse((obj) => {
+      if (obj.isMesh && obj.material) {
+        planeMesh = obj
+        console.log('✅ Found mesh:', obj.name || obj.uuid)
+      }
+    })
+  }
+
+  function update(timestamp) {
+    requestAnimationFrame(update)
+    if (!initialized) return
+    if (!planeMesh) {
+      try {
+        const { scene } = XR8.Threejs.xrScene()
+        scene.traverse((obj) => { if (obj.isMesh && obj.material) planeMesh = obj })
+      } catch (e) {}
+      return
+    }
+    if (loadedCount < FRAME_COUNT) return
+    if (lastTime === null) { lastTime = timestamp; return }
+    elapsed += timestamp - lastTime
+    lastTime = timestamp
+    if (elapsed < 1000 / FPS) return
+    elapsed = elapsed % (1000 / FPS)
+    currentFrame = (currentFrame + 1) % FRAME_COUNT
+    if (planeMesh.material) {
+      planeMesh.material.map = textures[currentFrame]
+      planeMesh.material.transparent = true
+      planeMesh.material.needsUpdate = true
+    }
+  }
+
+  const onxrloaded = () => {
+    console.log('✅ XR8 Ready')
+
+    // Configure image target BEFORE starting engine
+    XR8.XrController.configure({
+      imageTargets: ['my_target'],
+      imageTargetData: [
+        { name: 'my_target', src: 'assets/my_target.png', loadAutomatically: true }
+      ]
+    })
+
+    const waitForScene = setInterval(() => {
+      try {
+        const xrScene = XR8.Threejs.xrScene()
+        if (xrScene && xrScene.scene) {
+          clearInterval(waitForScene)
+          setupAnimation(xrScene.scene)
+          initialized = true
+          console.log('✅ Animation initialized')
+          requestAnimationFrame(update)
+        }
+      } catch (e) {}
+    }, 100)
+  }
+
+  window.XR8 ? onxrloaded() : window.addEventListener('xrloaded', onxrloaded)
+
+  // Scene config
+  const sceneConfig = {"objects":{"47699d9e-18a5-4f88-a4f9-b8be92e8f74a":{"components":{},"geometry":null,"id":"47699d9e-18a5-4f88-a4f9-b8be92e8f74a","light":{"type":"ambient"},"material":null,"name":"Ambient Light","position":[10,5,5],"rotation":[0,0,0,1],"scale":[1,1,1],"parentId":"88453035-dc0f-486d-868a-8ff7c2fda864","order":0.4038940050501252},"a608ddd9-9379-464d-966f-5d8d8674c83c":{"camera":{"type":"perspective","xr":{"desktop":"AR","xrCameraType":"image","headset":"disabled","phone":"AR","direction":"back"}},"components":{},"geometry":null,"id":"a608ddd9-9379-464d-966f-5d8d8674c83c","material":null,"name":"Camera","position":[0,0,0],"rotation":[0,0,0,1],"scale":[1,1,1],"parentId":"88453035-dc0f-486d-868a-8ff7c2fda864","order":1.0308214152219775},"ac1989e3-3b71-49e2-a05f-e682aeb18c36":{"components":{},"geometry":null,"id":"ac1989e3-3b71-49e2-a05f-e682aeb18c36","light":{"intensity":1,"type":"directional"},"material":null,"name":"Directional Light","position":[20,20,10],"rotation":[0,0,0,1],"scale":[1,1,1],"parentId":"88453035-dc0f-486d-868a-8ff7c2fda864","order":0.6644431107322474},"3db23022-b7cf-42c8-aa76-514eea60744d":{"id":"3db23022-b7cf-42c8-aa76-514eea60744d","position":[0,0,0],"rotation":[0,0,0,1],"scale":[1,1,1],"geometry":null,"material":null,"parentId":"88453035-dc0f-486d-868a-8ff7c2fda864","components":{},"name":"Image Target","imageTarget":{"name":"my_target.png"},"order":2.9164893056959245},"e347af4a-618a-4cbf-b5fd-4b1b86640cba":{"id":"e347af4a-618a-4cbf-b5fd-4b1b86640cba","position":[0,0,0.1957672797860202],"rotation":[-0.1716610298601247,0,0,0.9851560743493192],"scale":[0.573884031905844,0.6687761800618436,1],"geometry":{"type":"plane","width":1,"height":1},"material":{"type":"unlit","color":"#FFFFFF","textureSrc":{"type":"asset","asset":"assets/pngseq/tigerface001.png"},"forceTransparent":true,"side":"double"},"parentId":"3db23022-b7cf-42c8-aa76-514eea60744d","components":{},"name":"Plane","order":1.361236427256126}},"spaces":{"88453035-dc0f-486d-868a-8ff7c2fda864":{"id":"88453035-dc0f-486d-868a-8ff7c2fda864","name":"Default","activeCamera":"a608ddd9-9379-464d-966f-5d8d8674c83c","reflections":{"type":"url","url":"https://cdn.8thwall.com/web/assets/envmap/basic_env_map-m9hqpneh.jpg"}}},"entrySpaceId":"88453035-dc0f-486d-868a-8ff7c2fda864","scripts":["png-sequence-animator.js"],"runtimeVersion":{"type":"version","level":"major","major":2,"minor":0,"patch":0}}
+  delete sceneConfig.history
+  delete sceneConfig.historyVersion
+  window.ecs.application.init(sceneConfig)
+})()

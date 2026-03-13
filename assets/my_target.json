@@ -1,0 +1,6 @@
+{
+  "version": 1,
+  "name": "my_target",
+  "src": "assets/my_target.png",
+  "loadAutomatically": true
+}
