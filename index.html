@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+  <title>Kenji AR</title>
+
+  <!--
+    8th Wall self-hosted engine.
+    xr.js must be in the same folder as index.html.
+    Download from: https://8th.io/xrjs  → unzip → copy xr.js here.
+  -->
+  <script async src="./xr.js" data-preload-chunks="slam"></script>
+
+  <!-- A-Frame for 3D scene -->
+  <script src="https://aframe.io/releases/1.4.2/aframe.min.js"></script>
+
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { width: 100%; height: 100%; overflow: hidden; background: #000; }
+
+    #version-badge {
+      position: fixed; top: 12px; left: 12px;
+      background: rgba(255, 119, 85, 0.9); color: #fff;
+      font-family: monospace; font-size: 13px; font-weight: bold;
+      padding: 5px 10px; border-radius: 6px; z-index: 99999; pointer-events: none;
+    }
+    #loading-overlay {
+      position: fixed; inset: 0; background: #000;
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      z-index: 9999; color: #fff;
+      font-family: -apple-system, sans-serif; transition: opacity 0.6s;
+    }
+    .spinner {
+      width: 52px; height: 52px;
+      border: 4px solid rgba(255,255,255,0.15); border-top-color: #ff7755;
+      border-radius: 50%; animation: spin 0.8s linear infinite; margin-bottom: 18px;
+    }
+    #loading-overlay p { font-size: 16px; opacity: 0.8; }
+    #progress-bar {
+      width: 200px; height: 4px; background: rgba(255,255,255,0.2);
+      border-radius: 2px; margin-top: 12px; overflow: hidden;
+    }
+    #progress-fill { height: 100%; background: #ff7755; border-radius: 2px; width: 0%; transition: width 0.1s; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    #scan-hint {
+      position: fixed; bottom: 40px; left: 50%; transform: translateX(-50%);
+      background: rgba(0,0,0,0.6); color: #fff; padding: 12px 24px;
+      border-radius: 99px; font-family: -apple-system, sans-serif;
+      font-size: 15px; pointer-events: none; z-index: 9998; display: none;
+    }
+  </style>
+</head>
+<body>
+
+  <div id="version-badge">Kenji AR v1.0</div>
+
+  <div id="loading-overlay">
+    <div class="spinner"></div>
+    <p id="loading-text">Loading...</p>
+    <div id="progress-bar"><div id="progress-fill"></div></div>
+  </div>
+  <div id="scan-hint">📷 Aim at the artwork</div>
+
+  <a-scene
+    xrweb="disableWorldTracking: true"
+    xrextras-loading
+    xrextras-runtime-error
+    renderer="colorManagement: true; physicallyCorrectLights: true; alpha: true"
+    vr-mode-ui="enabled: false"
+    device-orientation-permission-ui="enabled: false"
+  >
+    <a-camera
+      position="0 1.8 4"
+      raycaster="objects: .cantap"
+      cursor="fuse: false; rayOrigin: mouse;">
+    </a-camera>
+
+    <a-light type="ambient" intensity="1.5" color="#fff"></a-light>
+    <a-light type="directional" position="1 2 1" intensity="1"></a-light>
+
+    <!-- Image target — name must match what we configure in JS below -->
+    <xrextras-named-image-target name="kenji-target">
+      <a-entity
+        id="seq-plane"
+        geometry="primitive: plane; width: 1.0; height: 1.0;"
+        position="0 0 0"
+        material="shader: flat; transparent: true; alphaTest: 0.05; side: double;">
+      </a-entity>
+    </xrextras-named-image-target>
+
+  </a-scene>
+
+  <script>
+    // ── CONFIG ─────────────────────────────────────────────────────────────
+    var CFG = {
+      folder:     'assets/pngseq',
+      prefix:     'tigerface',
+      digits:     3,
+      ext:        '.png',
+      startFrame: 1,
+      endFrame:   40,
+      fps:        12,
+    };
+
+    // ── Image target definition (480x640 grayscale PNG) ─────────────────────
+    // my_target.png should be grayscale, 480x640px.
+    // If it's a different size, adjust originalWidth/originalHeight below.
+    var IMAGE_TARGET = {
+      imagePath:  './assets/my_target.png',
+      metadata:   {},
+      name:       'kenji-target',
+      type:       'PLANAR',
+      properties: {
+        left:           0,
+        top:            0,
+        width:          480,
+        height:         640,
+        originalWidth:  480,
+        originalHeight: 640,
+        isRotated:      false,
+      }
+    };
+    // ──────────────────────────────────────────────────────────────────────
+
+    var overlay      = document.getElementById('loading-overlay');
+    var loadingText  = document.getElementById('loading-text');
+    var progressFill = document.getElementById('progress-fill');
+    var scanHint     = document.getElementById('scan-hint');
+
+    var textures     = [];
+    var planeMesh    = null;
+    var currentFrame = 0;
+    var lastTime     = 0;
+    var frameDur     = 1000 / CFG.fps;
+    var isPlaying    = false;
+
+    // ── Register image target with 8th Wall engine ─────────────────────────
+    var onxrloaded = function() {
+      XR8.XrController.configure({
+        imageTargetData: [ IMAGE_TARGET ],
+      });
+    };
+    window.XR8 ? onxrloaded() : window.addEventListener('xrloaded', onxrloaded);
+
+    // ── Filename builder ───────────────────────────────────────────────────
+    function framePath(i) {
+      var n = String(i);
+      while (n.length < CFG.digits) n = '0' + n;
+      return CFG.folder + '/' + CFG.prefix + n + CFG.ext;
+    }
+
+    // ── Preload all PNG frames ─────────────────────────────────────────────
+    function preloadFrames(onDone) {
+      var loader = new THREE.TextureLoader();
+      var total  = CFG.endFrame - CFG.startFrame + 1;
+      var done   = 0;
+      textures   = new Array(total);
+
+      for (var i = CFG.startFrame; i <= CFG.endFrame; i++) {
+        (function(fi, ai) {
+          loader.load(framePath(fi),
+            function(tex) {
+              tex.minFilter = THREE.LinearFilter;
+              tex.magFilter = THREE.LinearFilter;
+              textures[ai] = tex;
+              done++;
+              progressFill.style.width = Math.round(done / total * 100) + '%';
+              loadingText.textContent  = 'Loading frames... ' + done + '/' + total;
+              if (done === total) onDone();
+            },
+            undefined,
+            function() { done++; if (done === total) onDone(); }
+          );
+        })(i, i - CFG.startFrame);
+      }
+    }
+
+    // ── Wire plane mesh ────────────────────────────────────────────────────
+    function wirePlane() {
+      var planeEl = document.getElementById('seq-plane');
+      function tryGet() {
+        planeMesh = planeEl.getObject3D('mesh');
+        if (!planeMesh) { setTimeout(tryGet, 100); return; }
+        if (textures[0]) {
+          planeMesh.material.map = textures[0];
+          planeMesh.material.needsUpdate = true;
+        }
+      }
+      tryGet();
+    }
+
+    // ── Animation loop ─────────────────────────────────────────────────────
+    function animLoop(now) {
+      requestAnimationFrame(animLoop);
+      if (!isPlaying || !planeMesh || !textures.length) return;
+      if (now - lastTime < frameDur) return;
+      lastTime     = now;
+      currentFrame = (currentFrame + 1) % textures.length;
+      var tex = textures[currentFrame];
+      if (tex) {
+        planeMesh.material.map = tex;
+        planeMesh.material.needsUpdate = true;
+      }
+    }
+    requestAnimationFrame(animLoop);
+
+    // ── A-Frame scene ready ────────────────────────────────────────────────
+    var scene = document.querySelector('a-scene');
+    scene.addEventListener('loaded', function() {
+      loadingText.textContent = 'Loading frames...';
+
+      preloadFrames(function() {
+        wirePlane();
+        overlay.style.opacity = '0';
+        setTimeout(function() { overlay.style.display = 'none'; }, 700);
+        scanHint.style.display = 'block';
+      });
+    });
+
+    // ── Target found / lost ────────────────────────────────────────────────
+    var target = document.querySelector('xrextras-named-image-target');
+    target.addEventListener('xrcustomnamedimagetargetfound', function() {
+      isPlaying = true;
+      lastTime  = performance.now();
+      scanHint.style.display = 'none';
+    });
+    target.addEventListener('xrcustomnamedimagetargetlost', function() {
+      isPlaying = false;
+      scanHint.style.display = 'block';
+    });
+  </script>
+
+</body>
+</html>
