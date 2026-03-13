@@ -1,0 +1,23 @@
+{
+  "entrySpaceId": "space-1773380801125",
+  "objects": {},
+  "spaces": {
+    "space-1773380801125": {
+      "id": "space-1773380801125",
+      "name": "Default",
+      "activeCamera": null,
+      "reflections": {
+        "type": "url",
+        "url": "https://cdn.8thwall.com/web/assets/envmap/basic_env_map-m9hqpneh.jpg"
+      }
+    }
+  },
+  "runtimeVersion": {
+    "type": "version",
+    "level": "major",
+    "major": 2,
+    "minor": 0,
+    "patch": 0
+  },
+  "historyVersion": "gen-mmoh53l1"
+}
